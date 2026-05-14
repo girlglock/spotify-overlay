@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>spotibuh overlay</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: transparent;
+            overflow: hidden;
+            font-family: Helvetica, Arial, sans-serif;
+            display: flex;
+            min-height: 100vh;
+            padding: 24px;
+        }
+
+        #widget {
+            display: flex;
+            align-items: center;
+            user-select: none;
+            opacity: 0;
+            transform: translateY(10px) scale(var(--scale, 1));
+            transform-origin: var(--ox, left) var(--oy, bottom);
+            transition: opacity 0.3s ease, transform 0.3s ease;
+        }
+
+        #widget.visible {
+            opacity: 1;
+            transform: translateY(0) scale(var(--scale, 1));
+        }
+
+        #cover {
+            width: 52px;
+            height: 52px;
+            object-fit: cover;
+            border-radius: 4px;
+            margin-right: 12px;
+            filter:
+                drop-shadow(-1px -1px 0 #000) drop-shadow(1px -1px 0 #000) drop-shadow(-1px 1px 0 #000) drop-shadow(1px 1px 0 #000);
+        }
+
+        #cover:not([src]),
+        #cover[src=""] {
+            display: none;
+        }
+
+        #text {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        #title,
+        #artist {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            -webkit-text-stroke: 0.5px #000;
+            paint-order: stroke fill;
+        }
+
+        #title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #6398c2;
+        }
+
+        #artist {
+            font-size: 13px;
+            color: #8a8990;
+        }
+
+        #bar {
+            width: 100%;
+            height: 3px;
+            background: #2a2a2a;
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 6px;
+        }
+
+        #fill {
+            height: 100%;
+            width: 0%;
+            border-radius: 2px;
+            background: linear-gradient(90deg, #255379, #95bedf);
+            transition: width 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        #fill::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: -30px;
+            width: 30px;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, #a6cdec66, #ffffffaa, #a6cdec66, transparent);
+            animation: shimmer 2s infinite;
+        }
+
+        @keyframes shimmer {
+            to {
+                left: 100%;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <div id="widget">
+        <img id="cover" crossorigin="anonymous" />
+        <div id="text">
+            <div id="title"></div>
+            <div id="artist"></div>
+            <div id="bar">
+                <div id="fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const p = new URLSearchParams(location.search);
+        const userId = p.get("id") || "1167069721162686528";
+        const scale = p.get("scale") || "1";
+        const anchor = (p.get("anchor") || "bl").toLowerCase();
+
+        const w = document.getElementById("widget");
+
+        document.body.style.alignItems = anchor[0] === "t" ? "flex-start" : "flex-end";
+        document.body.style.justifyContent = anchor[1] === "r" ? "flex-end" : "flex-start";
+        w.style.setProperty("--scale", scale);
+        w.style.setProperty("--ox", anchor[1] === "r" ? "right" : "left");
+        w.style.setProperty("--oy", anchor[0] === "t" ? "top" : "bottom");
+
+        const cover = document.getElementById("cover");
+        const title = document.getElementById("title");
+        const artist = document.getElementById("artist");
+        const fill = document.getElementById("fill");
+
+        let currentKey = null;
+        let ticker = null;
+        let ws = null;
+        let hb = null;
+
+        function tick(start, end) {
+            clearInterval(ticker);
+            if (!start || !end) { fill.style.width = "0%"; return; }
+            const run = () => fill.style.width = Math.min(100, (Date.now() - start) / (end - start) * 100) + "%";
+            run();
+            ticker = setInterval(run, 1000);
+        }
+
+        function show({ song, by, art, ts }) {
+            const key = song + "|" + by;
+            if (key === currentKey) { tick(ts?.start, ts?.end); return; }
+            currentKey = key;
+            title.textContent = song || "Unknown";
+            artist.textContent = by || "";
+            cover.src = art || "";
+            tick(ts?.start, ts?.end);
+            w.classList.add("visible");
+        }
+
+        function hide() {
+            w.classList.remove("visible");
+            clearInterval(ticker);
+            currentKey = null;
+            setTimeout(() => {
+                title.textContent = artist.textContent = "";
+                fill.style.width = "0%";
+                cover.src = "";
+            }, 300);
+        }
+
+        function coverUrl(a) {
+            const li = a.assets?.large_image;
+            if (!li) return null;
+            if (li.startsWith("spotify:")) return "https://i.scdn.co/image/" + li.slice(8);
+            if (li.startsWith("http")) return li;
+            if (a.application_id) return "https://cdn.discordapp.com/app-assets/" + a.application_id + "/" + li + ".png";
+            return null;
+        }
+
+        function handle(d) {
+            if (d.listening_to_spotify && d.spotify) {
+                const s = d.spotify;
+                return show({ song: s.song, by: s.artist, art: s.album_art_url, ts: s.timestamps });
+            }
+            const acts = d.activities || [];
+            const music = acts.find(a => a.type === 2);
+            if (music) return show({ song: music.details || music.name, by: music.state || "", art: coverUrl(music), ts: music.timestamps });
+            const media = acts.find(a => a.assets?.large_image && a.details);
+            if (media) return show({ song: media.details, by: media.state || "", art: coverUrl(media), ts: media.timestamps });
+            hide();
+        }
+
+        function connect() {
+            ws = new WebSocket("wss://api.lanyard.rest/socket");
+            ws.onmessage = e => {
+                const m = JSON.parse(e.data);
+                if (m.op === 1) {
+                    clearInterval(hb);
+                    hb = setInterval(() => ws.send(JSON.stringify({ op: 3 })), m.d.heartbeat_interval);
+                    ws.send(JSON.stringify({ op: 2, d: { subscribe_to_id: userId } }));
+                }
+                if (m.op === 0) {
+                    if (m.t === "INIT_STATE") handle(m.d[userId] || m.d);
+                    if (m.t === "PRESENCE_UPDATE") handle(m.d);
+                }
+            };
+            ws.onclose = () => { clearInterval(hb); setTimeout(connect, 5000); };
+            ws.onerror = () => ws.close();
+        }
+
+        connect();
+    </script>
+</body>
+
+</html>
