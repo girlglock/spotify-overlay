@@ -24,6 +24,7 @@
             display: flex;
             align-items: center;
             user-select: none;
+            max-width: 320px;
             opacity: 0;
             transform: translateY(10px) scale(var(--scale, 1));
             transform-origin: var(--ox, left) var(--oy, bottom);
@@ -42,7 +43,7 @@
             border-radius: 4px;
             margin-right: 12px;
             filter:
-                drop-shadow(calc(var(--shadow, 1px) * -1) calc(var(--shadow, 1px) * -1) 0 #000) drop-shadow(var(--shadow, 1px) calc(var(--shadow, 1px) * -1) 0 #000) drop-shadow(calc(var(--shadow, 1px) * -1) var(--shadow, 1px) 0 #000) drop-shadow(var(--shadow, 1px) var(--shadow, 1px) 0 #000);
+                drop-shadow(-1px -1px 0 #000) drop-shadow(1px -1px 0 #000) drop-shadow(-1px 1px 0 #000) drop-shadow(1px 1px 0 #000);
         }
 
         #cover:not([src]),
@@ -54,15 +55,31 @@
             display: flex;
             flex-direction: column;
             min-width: 0;
+            overflow: hidden;
         }
 
         #title,
         #artist {
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            -webkit-text-stroke: var(--shadow, 1px) #000;
+            -webkit-text-stroke: 0.5px #000;
             paint-order: stroke fill;
+        }
+
+        .scrolling {
+            animation: marquee 6s ease-in-out infinite alternate;
+        }
+
+        @keyframes marquee {
+
+            0%,
+            20% {
+                transform: translateX(0);
+            }
+
+            80%,
+            100% {
+                transform: translateX(var(--overflow));
+            }
         }
 
         #title {
@@ -131,17 +148,28 @@
         const p = new URLSearchParams(location.search);
         const userId = p.get("id") || "1167069721162686528";
         const scale = p.get("scale") || "1";
-        const shadow = p.get("shadow") || "1px";
+        const [shadowRadius, shadowStrength] = (p.get("shadow") || "0px-0.6").split("-");
         const anchor = (p.get("anchor") || "bl").toLowerCase();
 
         const w = document.getElementById("widget");
 
-        document.body.style.alignItems = anchor[0] === "t" ? "flex-start" : "flex-end";
-        document.body.style.justifyContent = anchor[1] === "r" ? "flex-end" : "flex-start";
+        const vMap = { t: "flex-start", c: "center", b: "flex-end" };
+        const hMap = { l: "flex-start", c: "center", r: "flex-end" };
+        const oxMap = { l: "left", c: "center", r: "right" };
+        const oyMap = { t: "top", c: "center", b: "bottom" };
+
+        document.body.style.alignItems = vMap[anchor[0]] || "flex-end";
+        document.body.style.justifyContent = hMap[anchor[1]] || "flex-start";
         w.style.setProperty("--scale", scale);
-        w.style.setProperty("--shadow", shadow);
-        w.style.setProperty("--ox", anchor[1] === "r" ? "right" : "left");
-        w.style.setProperty("--oy", anchor[0] === "t" ? "top" : "bottom");
+        const strength = parseFloat(shadowStrength) || 0;
+        const full = Math.floor(strength);
+        const frac = strength - full;
+        const layers = [];
+        for (let i = 0; i < full; i++) layers.push(`drop-shadow(0 0 ${shadowRadius} rgba(0,0,0,1))`);
+        if (frac > 0) layers.push(`drop-shadow(0 0 ${shadowRadius} rgba(0,0,0,${frac.toFixed(3)}))`);
+        if (layers.length) w.style.filter = layers.join(" ");
+        w.style.setProperty("--ox", oxMap[anchor[1]] || "left");
+        w.style.setProperty("--oy", oyMap[anchor[0]] || "bottom");
 
         const cover = document.getElementById("cover");
         const title = document.getElementById("title");
@@ -161,6 +189,16 @@
             ticker = setInterval(run, 1000);
         }
 
+        function applyScroll(el) {
+            el.classList.remove("scrolling");
+            el.style.removeProperty("--overflow");
+            const overflow = el.scrollWidth - el.clientWidth;
+            if (overflow > 0) {
+                el.style.setProperty("--overflow", `-${overflow}px`);
+                el.classList.add("scrolling");
+            }
+        }
+
         function show({ song, by, art, ts }) {
             const key = song + "|" + by;
             if (key === currentKey) { tick(ts?.start, ts?.end); return; }
@@ -168,6 +206,8 @@
             title.textContent = song || "Unknown";
             artist.textContent = by || "";
             cover.src = art || "";
+            applyScroll(title);
+            applyScroll(artist);
             tick(ts?.start, ts?.end);
             w.classList.add("visible");
         }
@@ -178,6 +218,8 @@
             currentKey = null;
             setTimeout(() => {
                 title.textContent = artist.textContent = "";
+                title.classList.remove("scrolling");
+                artist.classList.remove("scrolling");
                 fill.style.width = "0%";
                 cover.src = "";
             }, 300);
