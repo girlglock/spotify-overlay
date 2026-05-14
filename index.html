@@ -42,7 +42,7 @@
             border-radius: 4px;
             margin-right: 12px;
             filter:
-                drop-shadow(-1px -1px 0 #000) drop-shadow(1px -1px 0 #000) drop-shadow(-1px 1px 0 #000) drop-shadow(1px 1px 0 #000);
+                drop-shadow(calc(var(--shadow, 1px) * -1) calc(var(--shadow, 1px) * -1) 0 #000) drop-shadow(var(--shadow, 1px) calc(var(--shadow, 1px) * -1) 0 #000) drop-shadow(calc(var(--shadow, 1px) * -1) var(--shadow, 1px) 0 #000) drop-shadow(var(--shadow, 1px) var(--shadow, 1px) 0 #000);
         }
 
         #cover:not([src]),
@@ -61,7 +61,7 @@
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            -webkit-text-stroke: 0.5px #000;
+            -webkit-text-stroke: var(--shadow, 1px) #000;
             paint-order: stroke fill;
         }
 
@@ -131,6 +131,7 @@
         const p = new URLSearchParams(location.search);
         const userId = p.get("id") || "1167069721162686528";
         const scale = p.get("scale") || "1";
+        const shadow = p.get("shadow") || "1px";
         const anchor = (p.get("anchor") || "bl").toLowerCase();
 
         const w = document.getElementById("widget");
@@ -138,6 +139,7 @@
         document.body.style.alignItems = anchor[0] === "t" ? "flex-start" : "flex-end";
         document.body.style.justifyContent = anchor[1] === "r" ? "flex-end" : "flex-start";
         w.style.setProperty("--scale", scale);
+        w.style.setProperty("--shadow", shadow);
         w.style.setProperty("--ox", anchor[1] === "r" ? "right" : "left");
         w.style.setProperty("--oy", anchor[0] === "t" ? "top" : "bottom");
 
